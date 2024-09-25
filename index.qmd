@@ -1,0 +1,151 @@
+---
+title: "INFLUENZA A H7N9 IN CHINA, 2013"
+format:
+  dashboard:
+    embed-resources: true
+theme: lux
+---
+
+```{r}
+# Load packages 
+if(!require(pacman)) install.packages("pacman")
+pacman::p_load(tidyverse, outbreaks, bslib, bsicons, shiny, 
+               rgeoboundaries, plotly, htmltools, reactable)
+
+
+flu_data <- outbreaks::fluH7N9_china_2013
+
+
+```
+
+```{r}
+total_cases <- nrow(flu_data)
+
+total_hospitalizations <- flu_data %>% 
+  filter(!is.na(date_of_hospitalisation)) %>% 
+  nrow()
+
+total_deaths <- flu_data %>% 
+  filter(outcome == "Death") %>% 
+  nrow
+
+```
+
+```{r}
+cases_per_province <- flu_data %>% 
+  count(province, name = "count") 
+
+cases_per_province_plot <- cases_per_province %>% 
+  arrange(desc(count)) %>% 
+  mutate(tooltip_label = paste(province, 
+                               count, 
+                               sep = ": ")) %>% 
+  ggplot(aes(y = reorder(province, count), 
+             x = count,
+             text = tooltip_label)) + 
+  geom_col(fill = "#4682b4") + 
+  labs(x = "Number of Cases",
+       y = FALSE) + 
+  theme(legend.position = "none",
+        axis.title.y = element_blank())+
+  theme_minimal()
+
+cases_per_province_ggplotly <- 
+  ggplotly(cases_per_province_plot, tooltip = "text")
+  
+```
+
+```{r}
+#make province map
+
+province_shapes <- rgeoboundaries::geoboundaries(country = "China", adm_lvl = 1) %>% 
+  mutate(shapeName = str_remove(shapeName, " Province")) %>% 
+  mutate(shapeName = str_remove(shapeName, " Municipality")) %>% 
+  mutate(shapeName = str_remove(shapeName, " Autonomous Region")) %>% 
+  mutate(shapeName = ifelse(shapeName == "Guangzhou", "Guangdong", shapeName)) 
+
+#setdiff(flu_data$province, province_shapes$shapeName)
+
+province_map <- left_join(province_shapes, cases_per_province, by = c("shapeName" = "province")) %>% 
+  mutate(tooltip_label = paste(shapeName, 
+                               count, 
+                               sep = ": ")) %>% 
+  ggplot(aes(fill = count))+
+  geom_sf(aes(text = tooltip_label))+
+  theme_void()+
+  theme(legend.position = "none")
+  
+province_map_ggplotly <- ggplotly(province_map, tooltip = "text")
+```
+
+
+
+# HOME
+
+## Row 1 {height=18%}
+
+```{r}
+value_box(
+  title = "Total Cases",
+  value = total_cases,
+  showcase = bsicons::bs_icon("virus"),
+  theme = value_box_theme(bg = "#518fd6")
+)
+```
+
+```{r}
+value_box(
+  title = "Total Hospitalizations",
+  value = total_hospitalizations,
+  showcase = bsicons::bs_icon("hospital"),
+  theme = value_box_theme(bg = "#214773")
+)
+```
+
+```{r}
+value_box(
+  title = "Total Deaths",
+  value = total_deaths,
+  showcase = bsicons::bs_icon("file-medical-fill"),
+  theme = value_box_theme(bg = "#3f71ab")
+)
+```
+
+
+## Row 2 {height=75%}
+
+### {width=30%}
+
+```{r title = "Number of Cases by Province"}
+cases_per_province_ggplotly
+```
+
+
+### {width=70%}
+
+```{r title = "Map of Provinces by Number of Cases"}
+province_map_ggplotly
+```
+
+# DOWNLOAD DATA
+
+The data used in this dashboard is shown below and can be downloaded as a CSV. 
+
+```{r}
+library(htmltools)
+
+htmltools::browsable(
+  tagList(
+    reactable(flu_data,
+              elementId = "flu-data-table",
+              searchable = T,
+              filterable = T),
+
+tags$button("Download as CSV",
+            onclick = "Reactable.downloadDataCSV('flu-data-table')")
+  )
+)
+
+
+```
+
